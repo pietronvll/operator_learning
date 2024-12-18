@@ -1,0 +1,25 @@
+[project]
+name = "operator-learning"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Pietro Novelli", email = "pietronvll@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.14.1",
+]
+
+[project.scripts]
+operator-learning = "operator_learning:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "scikit-learn>=1.6.0",
+]

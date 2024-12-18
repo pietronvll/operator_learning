@@ -4,7 +4,7 @@ from typing import Literal
 
 import numpy as np
 from numpy.typing import ArrayLike
-from scipy.linalg import eig, eigh, lstsq
+from scipy.linalg import cho_factor, cho_solve, eig, eigh, lstsq, qr
 from scipy.sparse.linalg import eigs
 
 from operator_learning.kernel.base import FitResult
@@ -42,9 +42,9 @@ def fit(
     # Remove the penalty from kernel_X (inplace)
     add_diagonal_(kernel_X, -penalty)
 
-    stable_values_idxs = rank_reveal(values, rank, ignore_warnings=False)
-    values = values[stable_values_idxs]
-    vectors = vectors[:, stable_values_idxs]
+    numerically_nonzero_values_idxs = rank_reveal(values, rank, ignore_warnings=False)
+    values = values[numerically_nonzero_values_idxs]
+    vectors = vectors[:, numerically_nonzero_values_idxs]
     # Compare the filtered eigenvalues with the regularization strength, and warn if there are any eigenvalues that are smaller than the regularization strength.
     if not np.all(np.abs(values) >= tikhonov_reg):
         logger.warning(
@@ -53,11 +53,19 @@ def fit(
 
     # Eigenvector normalization
     kernel_X_vecs = np.dot(kernel_X / sqrt(npts), vectors)
-    vecs_norms = np.sum(
-        kernel_X_vecs**2 + tikhonov_reg * kernel_X_vecs * vectors * sqrt(npts),
-        axis=0,
-    ) ** (0.5)
-    U = vectors / vecs_norms
+    vecs_norm = np.sqrt(
+        np.sum(
+            kernel_X_vecs**2 + tikhonov_reg * kernel_X_vecs * vectors * sqrt(npts),
+            axis=0,
+        )
+    )
+
+    stable_values_idxs = rank_reveal(
+        vecs_norm, rank, rcond=1000.0 * np.finfo(values.dtype).eps
+    )
+    U = vectors[:, stable_values_idxs] / vecs_norm[stable_values_idxs]
+    values = values[stable_values_idxs]
+
     # Ordering the results
     V = kernel_X @ U
     svals = np.sqrt(np.abs(values))
@@ -108,28 +116,98 @@ def fit_nystroem(
         raise ValueError(f"Unknown svd_solver {svd_solver}")
     add_diagonal_(kernel_Xnys_sq, -eps)
 
-    stable_values_idxs = rank_reveal(values, rank, ignore_warnings=False)
-    values = values[stable_values_idxs]
-    vectors = vectors[:, stable_values_idxs]
+    numerically_nonzero_values_idxs = rank_reveal(values, rank, ignore_warnings=False)
+    values = values[numerically_nonzero_values_idxs]
+    vectors = vectors[:, numerically_nonzero_values_idxs]
     # Compare the filtered eigenvalues with the regularization strength, and warn if there are any eigenvalues that are smaller than the regularization strength.
     if not np.all(np.abs(values) >= tikhonov_reg):
         logger.warning(
             f"Warning: {(np.abs(values) < tikhonov_reg).sum()} out of the {len(values)} squared singular values are smaller than the regularization strength {tikhonov_reg:.2e}. Consider redudcing the regularization strength to avoid overfitting."
         )
     # Eigenvector normalization
-    normalization_csts = np.sqrt(
-        np.abs(np.sum(vectors.conj() * (kernel_XYX @ vectors), axis=0))
+    vecs_norm = np.sqrt(np.abs(np.sum(vectors.conj() * (kernel_XYX @ vectors), axis=0)))
+    stable_values_idxs = rank_reveal(
+        vecs_norm, rank, rcond=1000.0 * np.finfo(values.dtype).eps
     )
-    well_conditioned_indices = rank_reveal(
-        normalization_csts, rank, rcond=1000.0 * np.finfo(vectors.dtype).eps
-    )
-    vectors = (
-        vectors[:, well_conditioned_indices]
-        / normalization_csts[well_conditioned_indices]
-    )
-    values = values[well_conditioned_indices]
+    vectors = vectors[:, stable_values_idxs] / vecs_norm[stable_values_idxs]
+    values = values[stable_values_idxs]
     U = A @ vectors
     V = _tmp_YX @ vectors
     svals = np.sqrt(np.abs(values))
+    result: FitResult = {"U": U, "V": V, "svals": svals}
+    return result
+
+
+def fit_randomized(
+    kernel_X: ArrayLike,  # Kernel matrix of the input data
+    kernel_Y: ArrayLike,  # Kernel matrix of the output data
+    tikhonov_reg: float,  # Tikhonov (ridge) regularization parameter
+    rank: int,  # Rank of the estimator
+    n_oversamples: int,  # Number of oversamples
+    optimal_sketching: bool,  # Whether to use optimal sketching (slower but more accurate) or not.
+    iterated_power: int,  # Number of iterations of the power method
+    rng_seed: int
+    | None = None,  # Seed for the random number generator (for reproducibility)
+    precomputed_cholesky=None,  # Precomputed Cholesky decomposition. Should be the output of cho_factor evaluated on the regularized kernel matrix.
+) -> FitResult:
+    rng = np.random.default_rng(rng_seed)
+    npts = kernel_X.shape[0]
+
+    penalty = npts * tikhonov_reg
+    add_diagonal_(kernel_X, penalty)
+    if precomputed_cholesky is None:
+        cholesky_decomposition = cho_factor(kernel_X)
+    else:
+        cholesky_decomposition = precomputed_cholesky
+    add_diagonal_(kernel_X, -penalty)
+
+    sketch_dimension = rank + n_oversamples
+
+    if optimal_sketching:
+        cov = kernel_Y / npts
+        sketch = rng.multivariate_normal(
+            np.zeros(npts, dtype=kernel_Y.dtype), cov, size=sketch_dimension
+        ).T
+    else:
+        sketch = rng.standard_normal(size=(npts, sketch_dimension))
+
+    for _ in range(iterated_power):
+        # Powered randomized rangefinder
+        sketch = (kernel_Y / npts) @ (
+            sketch - penalty * cho_solve(cholesky_decomposition, sketch)
+        )
+        sketch, _ = qr(sketch, mode="economic")  # QR re-orthogonalization
+
+    kernel_X_sketch = cho_solve(cholesky_decomposition, sketch)
+    _M = sketch - penalty * kernel_X_sketch
+
+    F_0 = sketch.T @ sketch - penalty * (sketch.T @ kernel_X_sketch)  # Symmetric
+    F_0 = 0.5 * (F_0 + F_0.T)
+    F_1 = _M.T @ ((kernel_Y @ _M) / npts)
+
+    values, vectors = eig(lstsq(F_0, F_1)[0])
+
+    numerically_nonzero_values_idxs = rank_reveal(values, rank, ignore_warnings=False)
+    values = values[numerically_nonzero_values_idxs]
+    vectors = vectors[:, numerically_nonzero_values_idxs]
+    # Remove elements in the kernel of F_0
+
+    relative_norm_sq = np.abs(
+        np.sum(vectors.conj() * (F_0 @ vectors), axis=0)
+        / np.linalg.norm(vectors, axis=0) ** 2
+    )
+
+    stable_values_idxs = rank_reveal(
+        relative_norm_sq, rank, rcond=1000.0 * np.finfo(values.dtype).eps
+    )
+    vectors = vectors[:, stable_values_idxs]
+    values = values[stable_values_idxs]
+
+    vecs_norms = (np.sum(vectors.conj() * (F_0 @ vectors), axis=0).real) ** 0.5
+    vectors = vectors / vecs_norms
+
+    U = sqrt(npts) * kernel_X_sketch @ vectors
+    V = sqrt(npts) * _M @ vectors
+    svals = np.sqrt(values)
     result: FitResult = {"U": U, "V": V, "svals": svals}
     return result

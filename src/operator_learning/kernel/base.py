@@ -47,7 +47,7 @@ def estimator_eig(
     fit_result: FitResult,
     K_X: ArrayLike,  # Kernel matrix of the input data
     K_YX: ArrayLike,  # Kernel matrix between the output data and the input data
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> EigResult:
     # SUV.TZ -> V.T K_YX U (right ev = SUvr, left ev = ZVvl)
     U = fit_result["U"]
     V = fit_result["V"]

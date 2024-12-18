@@ -1,8 +1,15 @@
 import logging
+from typing import TypedDict
 
 from numpy.typing import ArrayLike
 
 logger = logging.getLogger("operator_learning")
+
+
+class FitResult(TypedDict):
+    U: ArrayLike
+    V: ArrayLike
+    svals: ArrayLike | None
 
 
 def postprocess_UV(

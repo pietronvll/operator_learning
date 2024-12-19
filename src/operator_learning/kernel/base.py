@@ -3,8 +3,8 @@ from math import sqrt
 from typing import Literal, TypedDict
 
 import numpy as np
+import scipy.linalg
 from numpy.typing import ArrayLike
-from scipy.linalg import eig
 
 from operator_learning.linalg import weighted_norm
 from operator_learning.utils import fuzzy_parse_complex
@@ -43,7 +43,7 @@ def predict(
     return np.linalg.multi_dot([K_dot_U, M, V_dot_obs])
 
 
-def estimator_eig(
+def eig(
     fit_result: FitResult,
     K_X: ArrayLike,  # Kernel matrix of the input data
     K_YX: ArrayLike,  # Kernel matrix between the output data and the input data
@@ -56,7 +56,9 @@ def estimator_eig(
     W_YX = np.linalg.multi_dot([V.T, r_dim * K_YX, U])
     W_X = np.linalg.multi_dot([U.T, r_dim * K_X, U])
 
-    values, vl, vr = eig(W_YX, left=True, right=True)  # Left -> V, Right -> U
+    values, vl, vr = scipy.linalg.eig(
+        W_YX, left=True, right=True
+    )  # Left -> V, Right -> U
     values = fuzzy_parse_complex(values)
     r_perm = np.argsort(values)
     vr = vr[:, r_perm]

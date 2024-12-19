@@ -34,7 +34,7 @@ def rank_reveal(
     top_values, top_idxs = topk(values, rank)
 
     if all(top_values > rcond):
-        top_idxs
+        return top_idxs
     else:
         valid = top_values > rcond
         # In the case of multiple occurrences of the maximum values, the indices corresponding to the first occurrence are returned.
@@ -46,6 +46,7 @@ def rank_reveal(
                 f"Warning: Discarted {rank - values.shape[0]} dimensions of the {rank} requested due to numerical instability. Consider decreasing the rank. The largest discarded value is: {_first_discarded_val:.3e}."
             )
         return top_idxs[valid]
+
 
 def weighted_norm(A: ArrayLike, M: ArrayLike | None = None):
     r"""Weighted norm of the columns of A.

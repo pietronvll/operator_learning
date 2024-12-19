@@ -18,9 +18,7 @@ def fit(
     kernel_Y: ArrayLike,  # Kernel matrix of the output data
     tikhonov_reg: float,  # Tikhonov (ridge) regularization parameter, can be 0
     rank: int,  # Rank of the estimator
-    svd_solver: Literal[
-        "arnoldi", "full"
-    ] = "arnoldi",  # SVD solver to use. 'arnoldi' is faster but might be numerically unstable.
+    svd_solver: Literal["arnoldi", "full"] = "arnoldi",
 ) -> FitResult:
     # Number of data points
     npts = kernel_X.shape[0]
@@ -69,7 +67,7 @@ def fit(
     # Ordering the results
     V = kernel_X @ U
     svals = np.sqrt(np.abs(values))
-    result: FitResult = {"U": U, "V": V, "svals": svals}
+    result: FitResult = {"U": U.real, "V": V.real, "svals": svals}
     return result
 
 
@@ -78,11 +76,9 @@ def fit_nystroem(
     kernel_Y: ArrayLike,  # Kernel matrix of the output inducing points
     kernel_Xnys: ArrayLike,  # Kernel matrix between the input data and the input inducing points
     kernel_Ynys: ArrayLike,  # Kernel matrix between the output data and the output inducing points
-    tikhonov_reg: float = 0.0,  # Tikhonov (ridge) regularization parameter
-    rank: int | None = None,  # Rank of the estimator
-    svd_solver: Literal[
-        "arnoldi", "full"
-    ] = "arnoldi",  # Solver for the generalized eigenvalue problem. 'arnoldi' or 'full'
+    tikhonov_reg: float,  # Tikhonov (ridge) regularization parameter
+    rank: int,  # Rank of the estimator
+    svd_solver: Literal["arnoldi", "full"] = "arnoldi",
 ) -> FitResult:
     num_points = kernel_Xnys.shape[0]
     num_centers = kernel_X.shape[0]
@@ -134,7 +130,7 @@ def fit_nystroem(
     U = A @ vectors
     V = _tmp_YX @ vectors
     svals = np.sqrt(np.abs(values))
-    result: FitResult = {"U": U, "V": V, "svals": svals}
+    result: FitResult = {"U": U.real, "V": V.real, "svals": svals}
     return result
 
 
@@ -143,11 +139,10 @@ def fit_randomized(
     kernel_Y: ArrayLike,  # Kernel matrix of the output data
     tikhonov_reg: float,  # Tikhonov (ridge) regularization parameter
     rank: int,  # Rank of the estimator
-    n_oversamples: int,  # Number of oversamples
-    optimal_sketching: bool,  # Whether to use optimal sketching (slower but more accurate) or not.
-    iterated_power: int,  # Number of iterations of the power method
-    rng_seed: int
-    | None = None,  # Seed for the random number generator (for reproducibility)
+    n_oversamples: int = 5,  # Number of oversamples
+    optimal_sketching: bool = False,  # Whether to use optimal sketching (slower but more accurate) or not.
+    iterated_power: int = 1,  # Number of iterations of the power method
+    rng_seed: int | None = None,
     precomputed_cholesky=None,  # Precomputed Cholesky decomposition. Should be the output of cho_factor evaluated on the regularized kernel matrix.
 ) -> FitResult:
     rng = np.random.default_rng(rng_seed)

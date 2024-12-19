@@ -7,8 +7,8 @@ from numpy.typing import ArrayLike
 from scipy.linalg import cho_factor, cho_solve, eig, eigh, lstsq, qr
 from scipy.sparse.linalg import eigs
 
-from operator_learning.kernel.base import FitResult
 from operator_learning.linalg import add_diagonal_, rank_reveal
+from operator_learning.structs import FitResult
 
 logger = logging.getLogger("operator_learning")
 

@@ -6,8 +6,8 @@ import numpy as np
 from numpy.typing import ArrayLike
 from scipy.linalg import eigh, eigsh, lstsq
 
-from operator_learning.kernel.base import FitResult
 from operator_learning.linalg import add_diagonal_, rank_reveal
+from operator_learning.structs import FitResult
 
 logger = logging.getLogger("operator_learning")
 

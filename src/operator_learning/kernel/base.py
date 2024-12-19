@@ -1,27 +1,16 @@
 import logging
 from math import sqrt
-from typing import Literal, TypedDict
+from typing import Literal
 
 import numpy as np
 import scipy.linalg
 from numpy.typing import ArrayLike
 
 from operator_learning.linalg import weighted_norm
+from operator_learning.structs import EigResult, FitResult
 from operator_learning.utils import fuzzy_parse_complex
 
 logger = logging.getLogger("operator_learning")
-
-
-class FitResult(TypedDict):
-    U: ArrayLike
-    V: ArrayLike
-    svals: ArrayLike | None
-
-
-class EigResult(TypedDict):
-    values: ArrayLike
-    left: ArrayLike
-    right: ArrayLike
 
 
 def predict(

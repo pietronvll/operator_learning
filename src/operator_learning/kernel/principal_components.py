@@ -4,7 +4,8 @@ from typing import Literal
 
 import numpy as np
 from numpy.typing import ArrayLike
-from scipy.linalg import eigh, eigsh, lstsq
+from scipy.linalg import eigh, lstsq
+from scipy.sparse.linalg import eigsh
 
 from operator_learning.linalg import add_diagonal_, stable_topk
 from operator_learning.structs import FitResult

@@ -7,7 +7,7 @@ from numpy.typing import ArrayLike
 from scipy.linalg import cho_factor, cho_solve, eig, eigh, lstsq, qr
 from scipy.sparse.linalg import eigs
 
-from operator_learning.linalg import add_diagonal_, rank_reveal
+from operator_learning.linalg import add_diagonal_, stable_topk
 from operator_learning.structs import FitResult
 
 logger = logging.getLogger("operator_learning")
@@ -40,9 +40,8 @@ def fit(
     # Remove the penalty from kernel_X (inplace)
     add_diagonal_(kernel_X, -penalty)
 
-    numerically_nonzero_values_idxs = rank_reveal(values, rank, ignore_warnings=False)
-    values = values[numerically_nonzero_values_idxs]
-    vectors = vectors[:, numerically_nonzero_values_idxs]
+    values, stable_values_idxs = stable_topk(values, rank, ignore_warnings=False)
+    vectors = vectors[:, stable_values_idxs]
     # Compare the filtered eigenvalues with the regularization strength, and warn if there are any eigenvalues that are smaller than the regularization strength.
     if not np.all(np.abs(values) >= tikhonov_reg):
         logger.warning(
@@ -58,11 +57,9 @@ def fit(
         )
     )
 
-    stable_values_idxs = rank_reveal(
-        vecs_norm, rank, rcond=1000.0 * np.finfo(values.dtype).eps
-    )
+    norm_rcond = 1000.0 * np.finfo(values.dtype).eps
+    values, stable_values_idxs = stable_topk(vecs_norm, rank, rcond=norm_rcond)
     U = vectors[:, stable_values_idxs] / vecs_norm[stable_values_idxs]
-    values = values[stable_values_idxs]
 
     # Ordering the results
     V = kernel_X @ U
@@ -112,9 +109,8 @@ def fit_nystroem(
         raise ValueError(f"Unknown svd_solver {svd_solver}")
     add_diagonal_(kernel_Xnys_sq, -eps)
 
-    numerically_nonzero_values_idxs = rank_reveal(values, rank, ignore_warnings=False)
-    values = values[numerically_nonzero_values_idxs]
-    vectors = vectors[:, numerically_nonzero_values_idxs]
+    values, stable_values_idxs = stable_topk(values, rank, ignore_warnings=False)
+    vectors = vectors[:, stable_values_idxs]
     # Compare the filtered eigenvalues with the regularization strength, and warn if there are any eigenvalues that are smaller than the regularization strength.
     if not np.all(np.abs(values) >= tikhonov_reg):
         logger.warning(
@@ -122,11 +118,9 @@ def fit_nystroem(
         )
     # Eigenvector normalization
     vecs_norm = np.sqrt(np.abs(np.sum(vectors.conj() * (kernel_XYX @ vectors), axis=0)))
-    stable_values_idxs = rank_reveal(
-        vecs_norm, rank, rcond=1000.0 * np.finfo(values.dtype).eps
-    )
+    norm_rcond = 1000.0 * np.finfo(values.dtype).eps
+    values, stable_values_idxs = stable_topk(vecs_norm, rank, rcond=norm_rcond)
     vectors = vectors[:, stable_values_idxs] / vecs_norm[stable_values_idxs]
-    values = values[stable_values_idxs]
     U = A @ vectors
     V = _tmp_YX @ vectors
     svals = np.sqrt(np.abs(values))
@@ -181,22 +175,17 @@ def fit_randomized(
     F_1 = _M.T @ ((kernel_Y @ _M) / npts)
 
     values, vectors = eig(lstsq(F_0, F_1)[0])
+    values, stable_values_idxs = stable_topk(values, rank, ignore_warnings=False)
+    vectors = vectors[:, stable_values_idxs]
 
-    numerically_nonzero_values_idxs = rank_reveal(values, rank, ignore_warnings=False)
-    values = values[numerically_nonzero_values_idxs]
-    vectors = vectors[:, numerically_nonzero_values_idxs]
     # Remove elements in the kernel of F_0
-
     relative_norm_sq = np.abs(
         np.sum(vectors.conj() * (F_0 @ vectors), axis=0)
         / np.linalg.norm(vectors, axis=0) ** 2
     )
-
-    stable_values_idxs = rank_reveal(
-        relative_norm_sq, rank, rcond=1000.0 * np.finfo(values.dtype).eps
-    )
+    norm_rcond = 1000.0 * np.finfo(values.dtype).eps
+    values, stable_values_idxs = stable_topk(relative_norm_sq, rank, rcond=norm_rcond)
     vectors = vectors[:, stable_values_idxs]
-    values = values[stable_values_idxs]
 
     vecs_norms = (np.sum(vectors.conj() * (F_0 @ vectors), axis=0).real) ** 0.5
     vectors = vectors / vecs_norms

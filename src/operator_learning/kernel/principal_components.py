@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 from scipy.linalg import eigh, eigsh, lstsq
 
-from operator_learning.linalg import add_diagonal_, rank_reveal
+from operator_learning.linalg import add_diagonal_, stable_topk
 from operator_learning.structs import FitResult
 
 logger = logging.getLogger("operator_learning")
@@ -31,9 +31,8 @@ def fit(
         raise ValueError(f"Unknown svd_solver {svd_solver}")
     add_diagonal_(kernel_X, -npts * tikhonov_reg)
 
-    numerically_nonzero_values_idxs = rank_reveal(values, rank, ignore_warnings=False)
-    values = values[numerically_nonzero_values_idxs]
-    vectors = vectors[:, numerically_nonzero_values_idxs]
+    values, stable_values_idxs = stable_topk(values, rank, ignore_warnings=False)
+    vectors = vectors[:, stable_values_idxs]
     Q = sqrt(npts) * vectors / np.sqrt(values)
     kernel_X_eigvalsh = np.sqrt(np.abs(values)) / npts
     result: FitResult = {"U": Q, "V": Q, "svals": kernel_X_eigvalsh}
@@ -72,9 +71,8 @@ def fit_nystroem(
         raise ValueError(f"Unknown svd_solver {svd_solver}")
     add_diagonal_(kernel_X, -reg * ncenters)
 
-    numerically_nonzero_values_idxs = rank_reveal(values, rank, ignore_warnings=False)
-    values = values[numerically_nonzero_values_idxs]
-    vectors = vectors[:, numerically_nonzero_values_idxs]
+    values, stable_values_idxs = stable_topk(values, rank, ignore_warnings=False)
+    vectors = vectors[:, stable_values_idxs]
 
     U = sqrt(ncenters) * vectors / np.sqrt(values)
     V = np.linalg.multi_dot([kernel_Ynys.T, kernel_Xnys, vectors])

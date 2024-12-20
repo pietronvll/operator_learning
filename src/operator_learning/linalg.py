@@ -10,42 +10,52 @@ logger = logging.getLogger("operator_learning")
 
 def add_diagonal_(M: ArrayLike, alpha: float):
     """
-    Add alpha to the diagonal of a matrix M in-place.
+    Add alpha to the diagonal of M inplace.
 
     Parameters
     ----------
     M : ArrayLike
-        The matrix to modify.
+        The matrix to modify inplace.
     alpha : float
         The value to add to the diagonal of M.
     """
     np.fill_diagonal(M, M.diagonal() + alpha)
 
 
-def rank_reveal(
-    values: np.ndarray,
-    rank: int,  # Desired rank
-    rcond: float | None = None,  # Threshold for the singular values
+def stable_topk(
+    vec: ArrayLike,
+    k_max: int,
+    rcond: float | None = None,  # Threshold for the singular vec
     ignore_warnings: bool = True,
 ):
+    """Takes up to k_max indices of the top k_max values of vec. If the values are below rcond, they are discarded.
+
+    Args:
+        vec (ArrayLike): Vector to extract the top k indices from.
+        k (int): Number of indices to extract.
+        rcond (float, optional): Value below which the values are discarded. Defaults to None, in which case it is set according to the machine precision of vec's dtype. 
+
+    Returns:
+        tuple[ArrayLike, ArrayLike]: top values and their indices.
+    """
     if rcond is None:
-        rcond = 10.0 * values.shape[0] * np.finfo(values.dtype).eps
+        rcond = 10.0 * vec.shape[0] * np.finfo(vec.dtype).eps
 
-    top_values, top_idxs = topk(values, rank)
+    top_vec, top_idxs = topk(vec, k_max)
 
-    if all(top_values > rcond):
-        return top_idxs
+    if all(top_vec > rcond):
+        return top_vec, top_idxs
     else:
-        valid = top_values > rcond
-        # In the case of multiple occurrences of the maximum values, the indices corresponding to the first occurrence are returned.
+        valid = top_vec > rcond
+        # In the case of multiple occurrences of the maximum vec, the indices corresponding to the first occurrence are returned.
         first_invalid = np.argmax(np.logical_not(valid))
-        _first_discarded_val = np.max(np.abs(values[first_invalid:]))
+        _first_discarded_val = np.max(np.abs(vec[first_invalid:]))
 
         if not ignore_warnings:
             logger.warning(
-                f"Warning: Discarted {rank - values.shape[0]} dimensions of the {rank} requested due to numerical instability. Consider decreasing the rank. The largest discarded value is: {_first_discarded_val:.3e}."
+                f"Warning: Discarted {k_max - vec.shape[0]} dimensions of the {k_max} requested due to numerical instability. Consider decreasing the k. The largest discarded value is: {_first_discarded_val:.3e}."
             )
-        return top_idxs[valid]
+        return top_vec[valid], top_idxs[valid]
 
 
 def weighted_norm(A: ArrayLike, M: ArrayLike | None = None):
